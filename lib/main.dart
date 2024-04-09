@@ -1,16 +1,18 @@
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart'
     as img; // Importing image library for image processing
-import 'package:cross_file/cross_file.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
@@ -28,14 +30,15 @@ class ExampleDragTarget extends StatefulWidget {
 }
 
 class ExampleDragTargetState extends State<ExampleDragTarget> {
-  List<XFile> _list = [];
-  String outputPath = "/Users/mt/MT/宝/图片处理/导出";
-  String inputBtn = '照片文件夹拖进来';
-  String outputBtn = '导出文件夹拖进来';
+  String outputPath = '';
+  String inputPath = '';
+  String inputBtn = '照片文件夹拖进来 或者点击选择文件夹';
+  String outputBtn = '导出文件夹拖进来 或者点击选择文件夹';
   String resultBtn = '开始处理';
-  bool _dragging = false;
+  bool _centerMode = false;
   var width = TextEditingController();
   var height = TextEditingController();
+  List<String> failFiles = [];
 
   Offset? offset;
 
@@ -43,7 +46,7 @@ class ExampleDragTargetState extends State<ExampleDragTarget> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text('Image Processing'),
+          title: const Text('图片压缩+裁剪'),
         ),
         body: Center(
           child: Column(
@@ -59,15 +62,22 @@ class ExampleDragTargetState extends State<ExampleDragTarget> {
                         padding: const EdgeInsets.all(8.0),
                         child: DropTarget(
                           onDragDone: (detail) {
-                            // 处理拖拽完成事件
-                            _list = detail.files;
+                            inputPath = detail.files.first.path;
                             setState(() {
-                              inputBtn = _list.first.path;
+                              inputBtn = inputPath;
                             });
                           },
                           child: ElevatedButton(
-                            onPressed: () {
-                              // 按钮1的点击事件
+                            onPressed: () async {
+                              String? selectedDirectory =
+                                  await FilePicker.platform.getDirectoryPath();
+
+                              if (selectedDirectory != null) {
+                                inputPath = selectedDirectory;
+                                setState(() {
+                                  inputBtn = inputPath;
+                                });
+                              }
                             },
                             child: Text(inputBtn),
                           ),
@@ -84,15 +94,21 @@ class ExampleDragTargetState extends State<ExampleDragTarget> {
                         child: DropTarget(
                           onDragDone: (detail) {
                             outputPath = detail.files.first.path;
-                            print('${outputPath}');
                             setState(() {
                               outputBtn = outputPath;
                             });
                           },
                           child: ElevatedButton(
-                            onPressed: () {
-                              // 按钮2的点击事件
-                              print('按钮2被点击了');
+                            onPressed: () async {
+                              String? selectedDirectory =
+                                  await FilePicker.platform.getDirectoryPath();
+
+                              if (selectedDirectory != null) {
+                                outputPath = selectedDirectory;
+                                setState(() {
+                                  outputBtn = outputPath;
+                                });
+                              }
                             },
                             child: Text(outputBtn),
                           ),
@@ -136,6 +152,26 @@ class ExampleDragTargetState extends State<ExampleDragTarget> {
                     height: 100,
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: _centerMode,
+                            onChanged: (value) {
+                              setState(() {
+                                _centerMode = value!;
+                              });
+                            },
+                          ),
+                          const Text('居中裁剪')
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    height: 100,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
                       child: ElevatedButton(
                         onPressed: () {
                           // 按钮2的点击事件
@@ -150,91 +186,126 @@ class ExampleDragTargetState extends State<ExampleDragTarget> {
                   )
                 ],
               ),
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                    itemCount: failFiles.length,
+                    itemBuilder: (BuildContext con, int index) {
+                      return SelectableText('${failFiles[index]}');
+                    }),
+              )
             ],
           ),
         ));
   }
 
   processImages() async {
-    // final inputFolder = Directory('/Users/mt/MT/宝/图片处理/导演');
-    // final outputFolder = Directory('/Users/mt/MT/宝/图片处理/导出');
+    if (!isNumeric(width.text) || !isNumeric(height.text)) {
+      setState(() {
+        resultBtn = '图片宽高需要为数字';
+      });
+      return;
+    }
 
-    // if (!outputFolder.existsSync()) {
-    //   outputFolder.createSync(recursive: true);
-    // }
-
-    for (final entity in _list) {
-      bool isDirectory = await Directory(entity.path).exists();
-      if (isDirectory) {
-        print('${entity.name} ${entity.path}');
-
-        for (final entity in Directory(entity.path).listSync()) {
-          if (entity is File) {
-            print('${entity.path}');
-            await processFile(XFile(entity.path), int.parse(width.text), int.parse(height.text));
-          }
+    setState(() {
+      failFiles.clear();
+    });
+    bool isDirectory = await Directory(inputPath).exists();
+    if (isDirectory) {
+      for (final entity in Directory(inputPath).listSync()) {
+        if (entity is File) {
+          await processFile(XFile(entity.path), int.parse(width.text),
+              int.parse(height.text));
         }
-
-/*        await Directory(entity.path).list().forEach((element) async {
-          print('${element.path}');
-          await processFile(XFile(element.path));
-        });*/
-        print("MTMTMT");
-
       }
     }
     setState(() {
-      print("MTMTMT");
+      outputPath = '';
+      inputPath = '';
       resultBtn = '处理结束';
-
-      inputBtn = '照片文件夹拖进来';
-      outputBtn = '导出文件夹拖进来';
+      _centerMode = false;
+      inputBtn = '照片文件夹拖进来 或者点击选择文件夹';
+      outputBtn = '导出文件夹拖进来 或者点击选择文件夹';
 
       width.text = "";
       height.text = "";
     });
   }
 
-  Future<void> processFile(XFile entity, int targetWidth, int targetHeight) async {
+  Future<void> processFile(
+      XFile entity, int targetWidth, int targetHeight) async {
     final fileName = entity.path.split('/').last;
-    if (fileName.toLowerCase().endsWith('.jpg') ||
-        fileName.toLowerCase().endsWith('.jpeg') ||
-        fileName.toLowerCase().endsWith('.png') ||
-        fileName.toLowerCase().endsWith('.bmp')) {
-      // Read image
-      var image = img.decodeImage(await entity.readAsBytes());
+    try {
+      if (fileName.toLowerCase().endsWith('.jpg') ||
+          fileName.toLowerCase().endsWith('.jpeg') ||
+          fileName.toLowerCase().endsWith('.png') ||
+          fileName.toLowerCase().endsWith('.bmp')) {
+        try {
+          var image = img.decodeImage(await entity.readAsBytes());
+          // Convert to RGB if not already
+          if (image!.numChannels != 3) {
+            image = img.grayscale(image);
+          }
 
-      // Convert to RGB if not already
-      if (image!.numChannels != 3) {
-        image = img.grayscale(image);
-      }
+          final targetRatio = targetWidth / targetHeight;
 
-      // Define target width and height
-      // final targetWidth = 200;
-      // final targetHeight = 240;
-      final targetRatio = targetWidth / targetHeight;
+          final width = image.width;
+          final height = image.height;
+          final aspectRatio = width / height;
+          if (aspectRatio < targetRatio) {
+            var newHeight = (targetWidth / aspectRatio).round();
+            image =
+                img.copyResize(image, width: targetWidth, height: newHeight);
+            var y = (newHeight - targetHeight) / 2;
 
-      final width = image.width;
-      final height = image.height;
-      final aspectRatio = width / height;
-      if (aspectRatio < targetRatio) {
-        var newHeight = (targetWidth / aspectRatio).round();
-        image = img.copyResize(image, width: targetWidth, height: newHeight);
-        image = img.copyCrop(image, x: 0, y: 0, width: targetWidth, height: targetHeight);
+            if (!_centerMode) {
+              image = img.copyCrop(image,
+                  x: 0, y: 0, width: targetWidth, height: targetHeight);
+            } else {
+              image = img.copyCrop(image,
+                  x: 0, y: y.toInt(), width: targetWidth, height: targetHeight);
+            }
+          } else {
+            var newWidth = (targetHeight * aspectRatio).round();
+            image =
+                img.copyResize(image, width: newWidth, height: targetHeight);
+
+            var left = (newWidth - targetWidth) / 2;
+
+            // var right = (newWidth + targetWidth) / 2;
+            image = img.copyCrop(image,
+                x: left.toInt(),
+                y: 0,
+                width: targetWidth,
+                height: targetHeight);
+          }
+
+          await File('$outputPath/$fileName')
+              .writeAsBytes(img.encodeJpg(image));
+          setState(() {
+            failFiles.add('成功 $fileName');
+          });
+        } catch (e) {
+          setState(() {
+            failFiles.add('失败 $fileName');
+          });
+        }
       } else {
-        var newWidth = (targetHeight * aspectRatio).round();
-        image = img.copyResize(image, width: newWidth, height: targetHeight);
-
-        var left = (newWidth - targetWidth) / 2;
-
-        // var right = (newWidth + targetWidth) / 2;
-        image = img.copyCrop(image, x: left.toInt(), y: 0, width: targetWidth, height: targetHeight);
+        setState(() {
+          failFiles.add('失败 $fileName');
+        });
       }
-
-      // Save processed image
-      await File('$outputPath/$fileName').writeAsBytes(img.encodeJpg(image));
-
-      print("processed $fileName");
+    } catch (e) {
+      setState(() {
+        failFiles.add('失败 $fileName');
+      });
     }
+  }
+
+  bool isNumeric(String? str) {
+    if (str == null) {
+      return false;
+    }
+    return double.tryParse(str) != null;
   }
 }
